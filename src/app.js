@@ -7,6 +7,8 @@ const fs = require("fs");
 const bcrypt = require("bcryptjs");
 const hbs = require("hbs");
 const Register = require("./models/userregister");
+const cookieParser = require("cookie-parser");
+const auth = require("./middleware/auth");
 const template_path = path.join(__dirname, "../templates/views");
 const partials_path = path.join(__dirname, "../templates/partials");
 
@@ -16,9 +18,34 @@ app.set("views", template_path);
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
+app.use(cookieParser());
 
 app.get("/", (req, res) => {
   res.status(200).render("index");
+});
+
+app.get("/secret", auth, (req, res) => {
+  // console.log(`this is the cookie ${req.cookies.jwt}`);
+  res.status(200).render("secret");
+});
+
+app.get("/logout", auth, async (req, res) => {
+  try {
+    // From single logout
+    // req.user.tokens = req.user.tokens.filter((elem) => {
+    //   return elem.token !== req.token;
+    // });
+
+    // Logout from all the devices
+
+    req.user.tokens = [];
+
+    res.clearCookie("jwt");
+    await req.user.save();
+    res.render("logout");
+  } catch (error) {
+    res.status(500).send(error);
+  }
 });
 
 app.get("/register", async (req, res) => {
@@ -49,6 +76,12 @@ app.post("/submit", async (req, res) => {
       // Generating the JWT token
       const token = await registerUser.generateToken();
 
+      res.cookie("jwt", token, {
+        expires: new Date(Date.now() + 60000),
+        httpOnly: true,
+        // secure: true,
+      });
+
       const registered = await registerUser.save();
       res.status(201).render("submit");
     } else {
@@ -67,7 +100,12 @@ app.post("/signin", async (req, res) => {
     const useremail = await Register.findOne({ email: email });
     const isMatch = await bcrypt.compare(password, useremail.password);
     const token = await useremail.generateToken();
-    console.log(token);
+
+    res.cookie("jwt", token, {
+      expires: new Date(Date.now() + 60000),
+      httpOnly: true,
+      // secure: true,
+    });
 
     if (isMatch) {
       res.status(201).render("signin");
